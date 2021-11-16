@@ -39,6 +39,7 @@ dependencies:
   - pyomo
   - matplotlib
   - proj<8
+  - fiona=1.8.18
 
   # Keep in conda environment when calling ipython
   - ipython
