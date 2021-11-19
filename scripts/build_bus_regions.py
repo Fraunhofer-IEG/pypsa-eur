@@ -48,7 +48,6 @@ import pypsa
 import os
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import Point
 
 from vresutils.graph import voronoi_partition_pts
 
@@ -61,29 +60,6 @@ def save_to_geojson(s, fn):
     schema = {**gpd.io.file.infer_schema(s), 'geometry': 'Unknown'}
     s.to_file(fn, driver='GeoJSON', schema=schema)
 
-def get_nuts_shape(onshore_locs, nuts_shapes):
-    
-    def locate_bus(coords):
-        try:
-            return nuts_shapes[nuts_shapes.contains(
-                Point(coords["x"], coords["y"]))].item()
-        except ValueError:
-            # return 'not_found'
-            nuts_shapes[nuts_shapes.contains(Point(9.5, 40))].item()
-            # TODO !!Fatal!! assigning not found to a random shape
-
-    def get_id(coords):
-        try:
-            return nuts_shapes[nuts_shapes.contains(
-                Point(coords["x"], coords["y"]))].index.item()
-        except ValueError:
-            # return 'not_found'
-            nuts_shapes[nuts_shapes.contains(Point(9.5, 40))].index.item(
-            )  # TODO !!Fatal!! assigning not found to a random shape
-
-    regions = onshore_locs[["x", "y"]].apply(locate_bus, axis=1)
-    ids = onshore_locs[["x", "y"]].apply(get_id, axis=1)
-    return regions.values, ids.values
 
 if __name__ == "__main__":
     if 'snakemake' not in globals():
@@ -93,13 +69,10 @@ if __name__ == "__main__":
 
     countries = snakemake.config['countries']
 
-        
     n = pypsa.Network(snakemake.input.base_network)
 
     country_shapes = gpd.read_file(snakemake.input.country_shapes).set_index('name')['geometry']
     offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes).set_index('name')['geometry']
-    nuts_shapes = gpd.read_file(snakemake.input.nuts_shapes_neo).set_index("id")["geometry"].to_crs(epsg=4326)
-    # nuts_shapes_old = gpd.read_file(snakemake.input.nuts_shapes_old).set_index("index")["geometry"]
 
     onshore_regions = []
     offshore_regions = []
@@ -109,22 +82,11 @@ if __name__ == "__main__":
 
         onshore_shape = country_shapes[country]
         onshore_locs = n.buses.loc[c_b & n.buses.substation_lv, ["x", "y"]]
-        
-        if snakemake.config['clustering']['nuts_clustering']:
-            onshore_geo = get_nuts_shape(onshore_locs, nuts_shapes)[0]
-            nuts_id = get_nuts_shape(onshore_locs, nuts_shapes)[1]
-            print(country, 'True')
-        else:
-            onshore_geo = voronoi_partition_pts(onshore_locs.values, onshore_shape)
-            nuts_id = -1 #Not used
-            print(country, 'False')
-
-            
         onshore_regions.append(gpd.GeoDataFrame({
                 'name': onshore_locs.index,
                 'x': onshore_locs['x'],
                 'y': onshore_locs['y'],
-                'geometry': onshore_geo,
+                'geometry': voronoi_partition_pts(onshore_locs.values, onshore_shape),
                 'country': country
             }))
 
