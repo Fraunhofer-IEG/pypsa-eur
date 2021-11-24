@@ -198,7 +198,7 @@ logger = logging.getLogger(__name__)
 if __name__ == '__main__':
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_renewable_profiles', technology='solar')
+        snakemake = mock_snakemake('build_renewable_profiles', technology='offwind-ac')
     configure_logging(snakemake)
     pgb.streams.wrap_stderr()
     paths = snakemake.input
@@ -219,6 +219,20 @@ if __name__ == '__main__':
 
     cutout = atlite.Cutout(paths['cutout'])
     regions = gpd.read_file(paths.regions).set_index('name').rename_axis('bus')
+    
+    regions_crs = regions.crs
+    
+    regions = regions.dropna(axis="index", subset=["geometry"])
+    if snakemake.config['clustering']["nuts_clustering"]:
+        regions = gpd.GeoDataFrame(
+            regions.reset_index().groupby("shape_id").agg({
+                "x": "mean",
+                "y": "mean",
+                "country": "first",
+                "geometry": "first",
+                "bus": "first",
+            }).set_index("bus"))
+        regions.crs = regions_crs
     buses = regions.index
 
     excluder = atlite.ExclusionContainer(crs=3035, res=100)

@@ -69,7 +69,7 @@ def get_nuts_shape(onshore_locs, nuts_shapes):
                 Point(coords["x"], coords["y"]))].item()
         except ValueError:
             # return 'not_found'
-            nuts_shapes[nuts_shapes.contains(Point(9.5, 40))].item()
+            nuts_shapes[nuts_shapes.contains(Point(9.5, 40))].item()            #TODO Fatal
             # TODO !!Fatal!! assigning not found to a random shape
 
     def get_id(coords):
@@ -112,11 +112,11 @@ if __name__ == "__main__":
         
         if snakemake.config['clustering']['nuts_clustering']:
             onshore_geo = get_nuts_shape(onshore_locs, nuts_shapes)[0]
-            nuts_id = get_nuts_shape(onshore_locs, nuts_shapes)[1]
+            shape_id = get_nuts_shape(onshore_locs, nuts_shapes)[1]
             print(country, 'True')
         else:
             onshore_geo = voronoi_partition_pts(onshore_locs.values, onshore_shape)
-            nuts_id = -1 #Not used
+            shape_id = -1 #Not used
             print(country, 'False')
 
             
@@ -125,7 +125,8 @@ if __name__ == "__main__":
                 'x': onshore_locs['x'],
                 'y': onshore_locs['y'],
                 'geometry': onshore_geo,
-                'country': country
+                'country': country,
+                'shape_id': shape_id
             }))
 
         if country not in offshore_shapes.index: continue
@@ -136,7 +137,9 @@ if __name__ == "__main__":
                 'x': offshore_locs['x'],
                 'y': offshore_locs['y'],
                 'geometry': voronoi_partition_pts(offshore_locs.values, offshore_shape),
-                'country': country
+                'country': country,
+                'shape_id': offshore_locs.index
+
             })
         offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
         offshore_regions.append(offshore_regions_c)

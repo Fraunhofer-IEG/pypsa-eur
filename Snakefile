@@ -130,7 +130,7 @@ rule build_bus_regions:
         country_shapes='resources/country_shapes.geojson',
         offshore_shapes='resources/offshore_shapes.geojson',
         base_network="networks/base.nc",
-        nuts_shapes_neo='resources/NUTS_RG_03M_2021_3857_LEVL_2.geojson',
+        nuts_shapes_neo='resources/NUTS/simple_combined_nuts_gadm_noRS.geojson',
 	nuts_shapes_old='resources/nuts3_shapes.geojson'
     output:
         regions_onshore="resources/regions_onshore.geojson",

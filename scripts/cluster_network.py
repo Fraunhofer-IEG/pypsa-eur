@@ -134,6 +134,8 @@ import geopandas as gpd
 import pyomo.environ as po
 import matplotlib.pyplot as plt
 import seaborn as sns
+from shapely.geometry import Point
+#from build_shapes import get_GADM_layer
 
 from functools import reduce
 
@@ -256,6 +258,43 @@ def busmap_for_n_clusters(n, n_clusters, solver_name, focus_weights=None, algori
     return (n.buses.groupby(['country', 'sub_network'], group_keys=False)
             .apply(busmap_for_country).squeeze().rename('busmap'))
 
+def busmap_for_nuts_clusters(n, nuts_level):
+
+    gdf = gpd.read_file(
+                "resources/NUTS/combined_nuts_gadm_noRS.geojson").to_crs(epsg=4269)
+    
+    # gdf.GID_1 = gdf.GID_1.str.replace('_1', '').str.replace('BIH.', 'BA')
+    gdf['node_id'] = np.where(
+        gdf['id'].isna(), gdf['GID_1'].str.replace('_1', '').str.replace('BIH.', 'BA0'), gdf['id'])
+
+    def locate_bus(coords):
+        try:
+            return gdf[gdf.contains(
+                Point(coords["x"],
+                      coords["y"]))]['node_id'].item()
+        except ValueError:
+            return "not_found"
+
+    buses = n.buses
+    buses["gadm_{}".format(nuts_level)] = buses[["x", "y"]].apply(locate_bus,
+                                                                  axis=1)
+    busmap = buses["gadm_{}".format(nuts_level)]  # .apply(lambda x: x[:-2])
+    not_founds = busmap[busmap == "not_found"].index.tolist()
+    
+    
+    
+    # snakemake.config['electricity']['conventional_carriers']
+    
+    # snakemake.config['renewable']:
+    
+    
+    n.mremove("Bus", not_founds)   
+    n.mremove("Generator", n.generators[n.generators.bus.isin(not_founds)].index.tolist())
+    n.mremove("Load", n.loads[n.loads.bus.isin(not_founds)].index.tolist())
+
+    return n, busmap[busmap != "not_found"]
+
+
 
 def clustering_for_n_clusters(n, n_clusters, custom_busmap=False, aggregate_carriers=None,
                               line_length_factor=1.25, potential_mode='simple', solver_name="cbc",
@@ -273,7 +312,14 @@ def clustering_for_n_clusters(n, n_clusters, custom_busmap=False, aggregate_carr
         busmap.index = busmap.index.astype(str)
         logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
     else:
-        busmap = busmap_for_n_clusters(n, n_clusters, solver_name, focus_weights, algorithm)
+        
+        if snakemake.config["clustering"]['nuts_clustering']:
+            n, busmap = busmap_for_nuts_clusters(
+                n, 2 # TODO snakemake.config["build_shape_options"]["gadm_layer_id"]
+            )  # TODO make func only return busmap, and get level from config
+        else:
+            busmap = busmap_for_n_clusters(n, n_clusters, solver_name,
+                                           focus_weights, algorithm)
 
     clustering = get_clustering_from_busmap(
         n, busmap,
@@ -336,12 +382,22 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
+    n.buses.at['8191', 'country'] = 'AT'    
+    n.buses.at[['7745', '7732'], 'country'] = 'BG'    
+    n.buses.at[['8484', '8060'], 'country'] = 'CH'    
+    n.buses.at['8227', 'country'] = 'CZ'    
+    n.buses.at[['8409','8671'], 'country'] = 'FR'    
+    n.buses.at['8019', 'country'] = 'NO'    
+    n.buses.at['7115', 'country'] = 'PT'    
+    n.buses.at['8629', 'country'] = 'RS'    
 
     focus_weights = snakemake.config.get('focus_weights', None)
 
     renewable_carriers = pd.Index([tech
                                    for tech in n.generators.carrier.unique()
                                    if tech in snakemake.config['renewable']])
+
+    country_list = snakemake.config['countries']
 
     if snakemake.wildcards.clusters.endswith('m'):
         n_clusters = int(snakemake.wildcards.clusters[:-1])
