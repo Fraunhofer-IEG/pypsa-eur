@@ -218,6 +218,7 @@ def attach_load(n):
             return pd.DataFrame({group.index[0]: l})
         else:
             nuts3_cntry = nuts3.loc[nuts3.country == cntry]
+            
             transfer = vtransfer.Shapes2Shapes(group, nuts3_cntry.geometry,
                                                normed=False).T.tocsr()
             gdp_n = pd.Series(transfer.dot(nuts3_cntry['gdp'].fillna(1.).values),

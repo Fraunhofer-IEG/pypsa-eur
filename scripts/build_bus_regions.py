@@ -64,22 +64,29 @@ def save_to_geojson(s, fn):
 def get_nuts_shape(onshore_locs, nuts_shapes):
     
     def locate_bus(coords):
+        point = Point(coords["x"], coords["y"])
+        
+        nuts_shapes_country=nuts_shapes.filter(like=country, axis=0)
+              
         try:
-            return nuts_shapes[nuts_shapes.contains(
-                Point(coords["x"], coords["y"]))].item()
+            return nuts_shapes_country[nuts_shapes_country.contains(point)].item()
         except ValueError:
-            # return 'not_found'
-            nuts_shapes[nuts_shapes.contains(Point(9.5, 40))].item()            #TODO Fatal
-            # TODO !!Fatal!! assigning not found to a random shape
+            return min(nuts_shapes_country, key=(point.distance))         
 
     def get_id(coords):
+        point = Point(coords["x"], coords["y"])
+        
+        nuts_shapes_country=nuts_shapes.filter(like=country, axis=0)
+        
         try:
-            return nuts_shapes[nuts_shapes.contains(
-                Point(coords["x"], coords["y"]))].index.item()
+            return nuts_shapes_country[nuts_shapes_country.contains(point)].index.item()
+
         except ValueError:
             # return 'not_found'
-            nuts_shapes[nuts_shapes.contains(Point(9.5, 40))].index.item(
-            )  # TODO !!Fatal!! assigning not found to a random shape
+            return nuts_shapes_country[nuts_shapes_country.geometry==\
+                min(nuts_shapes_country, 
+                    key=(point.distance))].index.item() 
+            # TODO !!Fatal!! assigning not found to a random shape
 
     regions = onshore_locs[["x", "y"]].apply(locate_bus, axis=1)
     ids = onshore_locs[["x", "y"]].apply(get_id, axis=1)
@@ -98,7 +105,12 @@ if __name__ == "__main__":
 
     country_shapes = gpd.read_file(snakemake.input.country_shapes).set_index('name')['geometry']
     offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes).set_index('name')['geometry']
-    nuts_shapes = gpd.read_file(snakemake.input.nuts_shapes_neo).set_index("id")["geometry"].to_crs(epsg=4326)
+    nuts_shapes = gpd.read_file(snakemake.input.nuts_shapes_neo)[["id", "GID_1", "geometry"]].to_crs(epsg=4326)
+    
+    nuts_shapes.id = nuts_shapes.id.fillna(nuts_shapes.GID_1.str.replace('BIH', 'BA').str.replace('.', '').str.replace('_', ''))
+    
+    nuts_shapes.id = nuts_shapes.id.str.replace('UK', 'GB').str.replace('EL', 'GR')
+    nuts_shapes=nuts_shapes.set_index('id')['geometry']
     # nuts_shapes_old = gpd.read_file(snakemake.input.nuts_shapes_old).set_index("index")["geometry"]
 
     onshore_regions = []
@@ -114,6 +126,8 @@ if __name__ == "__main__":
             onshore_geo = get_nuts_shape(onshore_locs, nuts_shapes)[0]
             shape_id = get_nuts_shape(onshore_locs, nuts_shapes)[1]
             print(country, 'True')
+            if country == 'IT':
+                print(country)
         else:
             onshore_geo = voronoi_partition_pts(onshore_locs.values, onshore_shape)
             shape_id = -1 #Not used

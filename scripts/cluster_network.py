@@ -266,18 +266,26 @@ def busmap_for_nuts_clusters(n, nuts_level):
     # gdf.GID_1 = gdf.GID_1.str.replace('_1', '').str.replace('BIH.', 'BA')
     gdf['node_id'] = np.where(
         gdf['id'].isna(), gdf['GID_1'].str.replace('_1', '').str.replace('BIH.', 'BA0'), gdf['id'])
+    gdf.node_id = gdf.node_id.str.replace('UK', 'GB').str.replace('EL', 'GR')
 
-    def locate_bus(coords):
+    def locate_bus(coords, co):
+        gdf_co = gdf[gdf.node_id.str.contains(co)]
+        point = Point(coords["x"],
+              coords["y"])
         try:
-            return gdf[gdf.contains(
-                Point(coords["x"],
-                      coords["y"]))]['node_id'].item()
+            return gdf_co[gdf_co.contains(
+                point)]['node_id'].item()
         except ValueError:
-            return "not_found"
+
+            #return min(gdf_co.geometry, key=(point.distance))['node_id']
+            return gdf_co[gdf_co.geometry==\
+                          min(gdf_co.geometry, 
+                              key=(point.distance))].node_id.item() 
 
     buses = n.buses
-    buses["gadm_{}".format(nuts_level)] = buses[["x", "y"]].apply(locate_bus,
-                                                                  axis=1)
+    buses["gadm_{}".format(nuts_level)] = buses[["x", "y", "country"]].apply(
+        lambda bus: locate_bus(bus[['x','y']], bus['country']), axis=1)
+    
     busmap = buses["gadm_{}".format(nuts_level)]  # .apply(lambda x: x[:-2])
     not_founds = busmap[busmap == "not_found"].index.tolist()
     
@@ -317,6 +325,8 @@ def clustering_for_n_clusters(n, n_clusters, custom_busmap=False, aggregate_carr
             n, busmap = busmap_for_nuts_clusters(
                 n, 2 # TODO snakemake.config["build_shape_options"]["gadm_layer_id"]
             )  # TODO make func only return busmap, and get level from config
+            print('#####################################')
+            print(busmap)
         else:
             busmap = busmap_for_n_clusters(n, n_clusters, solver_name,
                                            focus_weights, algorithm)
@@ -359,7 +369,7 @@ def cluster_regions(busmaps, input=None, output=None):
 
     for which in ('regions_onshore', 'regions_offshore'):
         regions = gpd.read_file(getattr(input, which)).set_index('name')
-        geom_c = regions.geometry.groupby(busmap).apply(shapely.ops.cascaded_union)
+        geom_c = regions.geometry.groupby(busmap).apply(shapely.ops.unary_union)
         regions_c = gpd.GeoDataFrame(dict(geometry=geom_c))
         regions_c.index.name = 'name'
         save_to_geojson(regions_c, getattr(output, which))
@@ -382,14 +392,14 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
-    n.buses.at['8191', 'country'] = 'AT'    
-    n.buses.at[['7745', '7732'], 'country'] = 'BG'    
-    n.buses.at[['8484', '8060'], 'country'] = 'CH'    
-    n.buses.at['8227', 'country'] = 'CZ'    
-    n.buses.at[['8409','8671'], 'country'] = 'FR'    
-    n.buses.at['8019', 'country'] = 'NO'    
-    n.buses.at['7115', 'country'] = 'PT'    
-    n.buses.at['8629', 'country'] = 'RS'    
+    # n.buses.at['8191', 'country'] = 'AT'    
+    # n.buses.at[['7745', '7732'], 'country'] = 'BG'    
+    # n.buses.at[['8484', '8060'], 'country'] = 'CH'    
+    # n.buses.at['8227', 'country'] = 'CZ'    
+    # n.buses.at[['8409','8671'], 'country'] = 'FR'    
+    # n.buses.at['8019', 'country'] = 'NO'    
+    # n.buses.at['7115', 'country'] = 'PT'    
+    # n.buses.at['8629', 'country'] = 'RS'    
 
     focus_weights = snakemake.config.get('focus_weights', None)
 
